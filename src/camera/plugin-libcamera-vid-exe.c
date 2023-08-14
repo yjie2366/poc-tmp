@@ -133,9 +133,24 @@ int main(int argc, char **argv)
 	int vid_pipe[2] = { 0 };
 	char *modules[3] = {
 		"/usr/bin/libcamera-vid",
-		"/home/jie/Documents/audit/audit-overhead/my_samples/audit/test/plugin-camera/gst_camera",
-		"/home/jie/Documents/audit/audit-overhead/my_samples/audit/test/plugin-camera/server.py" };
-		// need a more decent way to store modules path
+//		"/home/jie/Documents/audit/audit-overhead/my_samples/audit/test/plugin-camera/gst_camera",
+//		"/home/jie/Documents/audit/audit-overhead/my_samples/audit/test/plugin-camera/python/server.py" };
+		NULL, NULL };
+	char gst_path[PATH_MAX] = { 0 };
+	char flask_path[PATH_MAX] = { 0 };
+
+	if (!realpath("./gst_camera", gst_path)) {
+		fprintf(stderr, "Couldn't find Gstreamer camera\n");
+		goto out;
+	}
+
+	if (!realpath("./python/server.py", flask_path)) {
+		fprintf(stderr, "Couldn't find Flask server\n");
+		goto out;
+	}
+
+	modules[1] = gst_path;
+	modules[2] = flask_path;	
 
 	mypid = getpid();
 
@@ -230,8 +245,8 @@ int main(int argc, char **argv)
 			else if (control_pid > 0) {
 				close(vid_pipe[0]);
 				close(vid_pipe[1]);
-				
-				rc = init_audit_rules_exe(&audit_fd, modules, 3);
+
+				rc = init_audit_rules_exe(&audit_fd, modules, 3, &control_pid, 1);
 				if (rc < 0) {
 					fprintf(stderr, "Failed to initialize rules\n");
 					goto out;

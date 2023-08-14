@@ -10,11 +10,10 @@ endif
 
 .PHONY: all clean
 
-all: plugin-camera-test plugin-camera-test-exe subscriber filter
+all: plugin-camera-test-exe subscriber filter sysname.h
 
 subscriber: subscriber.c mqtt_testlib.c
 	$(CC) $(INCLUDES) -Wall -O2 -o $@ $^ -L$(LIB) -lmosquitto 
-
 
 filter: filter.c mqtt_testlib.c
 	$(CC) $(INCLUDES) -Wall -O2 -o $@ $^ -L$(LIB) -lmosquitto 
@@ -22,13 +21,20 @@ filter: filter.c mqtt_testlib.c
 gst_camera: camera-fdsrc.c
 	$(CC) -Wall -O2 $^ -o $@ $(shell pkg-config --cflags --libs gstreamer-1.0) -li2c -lpthread
 
-plugin-camera-test: gst_camera plugin-libcamera-vid.c mqtt_testlib.c plugin-testlib.c
+sysname.h: sysname_gen.c
+	$(CC) -o sysname_gen $^
+	@./sysname_gen > $@
+
+sysname.incl:
+	ausyscall --dump | sed -f script.sed | sed -e 's/Using.*//'> sysname.incl
+
+plugin-camera-test: gst_camera sysname.h plugin-libcamera-vid.c mqtt_testlib.c plugin-testlib.c
 	$(CC) $(INCLUDES) -Wall -O2 -o $@ $^ -L$(LIB) -lauparse -laudit -lmosquitto 
 	sudo cp -f $@ /usr/local/sbin
 	
-plugin-camera-test-exe: gst_camera plugin-libcamera-vid-exe.c mqtt_testlib.c plugin-testlib.c
+plugin-camera-test-exe: gst_camera sysname.h plugin-libcamera-vid-exe.c mqtt_testlib.c plugin-testlib.c
 	$(CC) $(INCLUDES) -Wall -O2 -o $@ $^ -L$(LIB) -lauparse -laudit -lmosquitto 
 	sudo cp -f $@ /usr/local/sbin
 
 clean:
-	rm -f plugin-camera-test plugin-camera-test-exe gst_camera subscriber filter
+	rm -f plugin-camera-test plugin-camera-test-exe gst_camera subscriber filter sysname.h sysname.incl
