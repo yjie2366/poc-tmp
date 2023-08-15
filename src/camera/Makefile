@@ -21,8 +21,8 @@ filter: filter.c mqtt_testlib.c
 gst_camera: camera-fdsrc.c
 	$(CC) -Wall -O2 $^ -o $@ $(shell pkg-config --cflags --libs gstreamer-1.0) -li2c -lpthread
 
-sysname.h: sysname_gen.c
-	$(CC) -o sysname_gen $^
+sysname.h: sysname_gen.c sysname.incl
+	$(CC) -o sysname_gen sysname_gen.c
 	@./sysname_gen > $@
 
 sysname.incl:

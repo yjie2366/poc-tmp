@@ -133,8 +133,6 @@ int main(int argc, char **argv)
 	int vid_pipe[2] = { 0 };
 	char *modules[3] = {
 		"/usr/bin/libcamera-vid",
-//		"/home/jie/Documents/audit/audit-overhead/my_samples/audit/test/plugin-camera/gst_camera",
-//		"/home/jie/Documents/audit/audit-overhead/my_samples/audit/test/plugin-camera/python/server.py" };
 		NULL, NULL };
 	char gst_path[PATH_MAX] = { 0 };
 	char flask_path[PATH_MAX] = { 0 };
@@ -246,7 +244,7 @@ int main(int argc, char **argv)
 				close(vid_pipe[0]);
 				close(vid_pipe[1]);
 
-				rc = init_audit_rules_exe(&audit_fd, modules, 3, &control_pid, 1);
+				rc = init_audit_rules_exe(&audit_fd, modules, 2, &control_pid, 1);
 				if (rc < 0) {
 					fprintf(stderr, "Failed to initialize rules\n");
 					goto out;
