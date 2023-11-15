@@ -13,12 +13,13 @@
 
 volatile int mqtt_connected = 0;
 volatile uint64_t nmessage = 0;
-volatile uint64_t npuback = 0;
+uint64_t npuback = 0;
+static uint64_t npublish = 0;
+
 void	*mqtt_queue_mx = NULL;
 
 volatile struct mqtt_message_node *head = NULL;
 static struct mqtt_message_node *tail = NULL;
-static uint64_t npublish = 0;
 
 struct mqtt_message_node *mqtt_new_message(char *msg, int len, int qos, char *topic)
 {
@@ -52,12 +53,12 @@ struct mqtt_message_node *mqtt_new_message(char *msg, int len, int qos, char *to
 
 	memcpy(node->msg, msg, len * sizeof(char));
 
-	mqtt_mx_lock(mqtt_queue_mx);
+	//mqtt_mx_lock(mqtt_queue_mx);
 	if (!head) { 
 		head = node;
 		tail = node;
 	}
-	mqtt_mx_unlock(mqtt_queue_mx);
+	//mqtt_mx_unlock(mqtt_queue_mx);
 
 	nmessage++;
 out:
@@ -118,7 +119,7 @@ void mqtt_msg_enq(struct mqtt_message_node *node)
 
 void mqtt_msg_deq(void)
 {
-	mqtt_mx_lock(mqtt_queue_mx);
+	//mqtt_mx_lock(mqtt_queue_mx);
 	struct mqtt_message_node *tmp = (struct mqtt_message_node *)head;
 	
 	head = head->next;
@@ -126,7 +127,7 @@ void mqtt_msg_deq(void)
 		if (tmp->topic) free(tmp->topic);
 		free(tmp);
 	}
-	mqtt_mx_unlock(mqtt_queue_mx);
+	//mqtt_mx_unlock(mqtt_queue_mx);
 }
 
 static void mqtt_on_publish(struct mosquitto *mosq, void *obj, int mid)
@@ -134,14 +135,14 @@ static void mqtt_on_publish(struct mosquitto *mosq, void *obj, int mid)
 	(void)obj;
 
 	npuback++;
-	mqtt_msg_deq();
+//	mqtt_msg_deq();
 
-	mqtt_mx_lock(mqtt_queue_mx);
-	if (head) {
-		struct mqtt_message_node *next = (struct mqtt_message_node *)head;	
-		mqtt_publish(mosq, next);
-	}
-	mqtt_mx_unlock(mqtt_queue_mx);
+	//mqtt_mx_lock(mqtt_queue_mx);
+//	if (head) {
+//		struct mqtt_message_node *next = (struct mqtt_message_node *)head;	
+//		mqtt_publish(mosq, next);
+//	}
+	//mqtt_mx_unlock(mqtt_queue_mx);
 }
 
 static void mqtt_on_connect(struct mosquitto *mosq, void *obj, int rc)
@@ -274,28 +275,32 @@ void mqtt_finalize(void *mqtt_inst)
 	mqtt_mx_destroy(mqtt_queue_mx);
 
 	// DEBUG
-	// fprintf(stderr, "Number of published messages: %ld\n", npublish);
-	// fprintf(stderr, "Number of pubacked messages: %ld\n", npuback);
+	 fprintf(stderr, "Number of published messages: %ld\n", npublish);
+	 fprintf(stderr, "Number of pubacked messages: %ld\n", npuback);
 }
 
-int mqtt_publish(void *mqtt_inst, struct mqtt_message_node *node)
+//int mqtt_publish(void *mqtt_inst, struct mqtt_message_node *node)
+int mqtt_publish(void *mqtt_inst, char *topic, int len, char *msg)
 {
 	int	rc = 0;
 	struct mosquitto *mosq = (struct mosquitto *) mqtt_inst;
-	char *topic = node->topic;
-	int len = node->len;
-	char *msg = node->msg;
-	int qos = node->qos;
+//	char *topic = node->topic;
+//	int len = node->len;
+//	char *msg = node->msg;
+//	int qos = node->qos;
+	int qos = 1;
+	int mid = 0;
 
-	if (node == head) {
-		rc = mosquitto_publish(mosq, &node->mid, topic, len, msg, qos, 0);
+//	if (node == head) {
+//		rc = mosquitto_publish(mosq, &node->mid, topic, len, msg, qos, 0);
+		rc = mosquitto_publish(mosq, &mid, topic, len, msg, qos, 0);
 		if (rc != MOSQ_ERR_SUCCESS) {
-			fprintf(stderr, "Publish msg ID %d failed ERROR %d\n", node->mid, rc);
+			fprintf(stderr, "Publish msg ID %d failed ERROR %d\n", mid, rc);
 			return -1;
 		}
-	} else {
-		mqtt_msg_enq(node);
-	}
+//	} else {
+//		mqtt_msg_enq(node);
+//	}
 
 	npublish++;
 

@@ -16,7 +16,8 @@ subscriber: subscriber.c mqtt_testlib.c
 	$(CC) $(INCLUDES) -Wall -O2 -o $@ $^ -L$(LIB) -lmosquitto 
 
 filter: filter.c mqtt_testlib.c
-	$(CC) $(INCLUDES) -Wall -O2 -o $@ $^ -L$(LIB) -lmosquitto 
+	$(CC) $(INCLUDES) -Wall -O2 -o $@ $^ -L$(LIB) -lmosquitto
+	sudo cp $@ /usr/local/sbin
 
 gst_camera: camera-fdsrc.c
 	$(CC) -Wall -O2 $^ -o $@ $(shell pkg-config --cflags --libs gstreamer-1.0) -li2c -lpthread

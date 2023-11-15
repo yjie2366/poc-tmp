@@ -90,22 +90,68 @@ find:
 unsigned int core_bind(int _cpu, pid_t pid)
 {
 	int		rc = 0;
-	unsigned int cpu = 0;
 	cpu_set_t   nmask;
+	unsigned int cpu = 0;
 
-	if (_cpu < 0) {
+	if (_cpu < -1) {
 		/* just return the current core */
 		goto skip;
 	}
-	
-	cpu = _cpu;
+	else if (_cpu == -1) { // set all the cores
+		int i;
 
-	CPU_ZERO(&nmask);
-	CPU_SET(cpu, &nmask);
+		CPU_ZERO(&nmask);
+		for (i = 0; i < sysconf(_SC_NPROCESSORS_ONLN); i++) {
+			CPU_SET(i, &nmask);
+		}
+			
+	}
+	else {
+		cpu = _cpu;
+
+		CPU_ZERO(&nmask);
+		CPU_SET(cpu, &nmask);
+	}
 
 	rc = sched_setaffinity(pid, sizeof(nmask), &nmask);
 	if (rc < 0) {
 		printf("Failed to bind to CPU %d\n", cpu);
+		perror("sched_setaffinity: ");
+	}
+
+skip:
+	getcpu(&cpu, NULL);
+	return cpu;
+}
+
+unsigned int core_exclude(int *cpus, int num_cpus, pid_t pid)
+{
+	int rc = 0;
+	cpu_set_t nmask;
+	unsigned int cpu = 0;
+
+	if (num_cpus <= 0) {
+		goto skip;
+	}
+	else {
+		int i;
+		
+		CPU_ZERO(&nmask);
+
+		// set all the cores
+		for (i = 0; i < sysconf(_SC_NPROCESSORS_ONLN); i++) {
+			CPU_SET(i, &nmask);
+		}
+
+		// clear the bit of the excluded cpus 
+		for (i = 0; i < num_cpus; i++) {
+				CPU_CLR(cpus[i], &nmask);
+		}
+	}
+
+	rc = sched_setaffinity(pid, sizeof(nmask), &nmask);
+	if (rc < 0) {
+		printf("Failed to exclude CPU %d\n", cpu);
 		perror("sched_setaffinity: ");
 	}
 

@@ -4,10 +4,18 @@
 #include <unistd.h>
 #include <mosquitto.h>
 #include <errno.h>
+#include <signal.h>
 #include "mqtt_testlib.h"
 
 char *topic_sub = "/audit/raw";
 char *topic_pub = "/audit/filtered";
+unsigned long num_msg = 0;
+
+static void sigterm_handler(int sig)
+{
+        fprintf(stderr, "NUmber of received msg: %ld\n", num_msg);
+        exit(0);
+}
 
 void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message)
 {
@@ -16,13 +24,15 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
 	int qos = message->qos;
 	int rc = 0;
 
-	struct mqtt_message_node *new_msg = mqtt_new_message(payload, msg_len, qos, topic_pub);
-	if (!new_msg) {
-		perror("Failed to create message node:");
-		mosquitto_disconnect(mosq);
-	}
+	num_msg++;
+//	struct mqtt_message_node *new_msg = mqtt_new_message(payload, msg_len, qos, topic_pub);
+//	if (!new_msg) {
+//		perror("Failed to create message node:");
+//		mosquitto_disconnect(mosq);
+//	}
 
-	rc = mqtt_publish(mosq, new_msg);
+//	rc = mqtt_publish(mosq, new_msg);
+	rc = mqtt_publish(mosq, topic_pub, msg_len, payload);
 	if (rc) {
 		perror("Failed to publish received message: ");
 		mosquitto_disconnect(mosq);
@@ -32,10 +42,17 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
 int main(int argc, char **argv)
 {
     struct mosquitto *mosq = NULL;
-	char *host = "192.168.151.23";
+//	char *host = "192.168.151.23";
+	char *host = "136.187.99.22";
     int	keepalive = 60;
     int	port = 1883;
     int ret = 0;
+	struct sigaction sa;
+
+    sa.sa_flags = 0;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_handler = sigterm_handler;
+    sigaction(SIGTERM, &sa, NULL);
 	
 	mosq = mqtt_init(host, port, keepalive, NULL, on_message, NULL);
 	if (!mosq) {

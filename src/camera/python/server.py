@@ -4,6 +4,10 @@ from flask import Flask, request, redirect
 from flask_restful import Resource, Api, reqparse, abort
 from Focuser import Focuser
 import smbus
+import socket
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
 app = Flask(__name__)
 api = Api(app)

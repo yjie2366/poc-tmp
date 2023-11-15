@@ -67,7 +67,8 @@ int main(int argc, char **argv)
 	GstPad *queue_fps_pad = NULL, *queue_udp_pad = NULL;
 #endif
 
-	gchar *rtp_host = "192.168.151.36";
+	//gchar *rtp_host = "192.168.151.36";
+	gchar *rtp_host = "136.187.99.21";
 	guint rtp_port = 5000;
 	GstStateChangeReturn ret;
 	GstBus *bus = NULL;
