@@ -32,7 +32,7 @@ sysname.incl:
 plugin-camera-test: gst_camera sysname.h plugin-libcamera-vid.c mqtt_testlib.c plugin-testlib.c
 	$(CC) $(INCLUDES) -Wall -O2 -o $@ $^ -L$(LIB) -lauparse -laudit -lmosquitto 
 	sudo cp -f $@ /usr/local/sbin
-	
+
 plugin-camera-test-exe: gst_camera sysname.h plugin-libcamera-vid-exe.c mqtt_testlib.c plugin-testlib.c
 	$(CC) $(INCLUDES) -Wall -O2 -o $@ $^ -L$(LIB) -lauparse -laudit -lmosquitto 
 	sudo cp -f $@ /usr/local/sbin

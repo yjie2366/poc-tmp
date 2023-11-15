@@ -14,9 +14,12 @@ def get_my_ip():
 
 streaming_port = 5000
 control_port = 5001
-server_ip = '192.168.151.23'
+server_ip = '136.187.99.22'
 client_ip = get_my_ip()
 cur_dir = os.getcwd()
+
+tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+tcp_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
 # request counter
 req_cnt = 0
@@ -37,7 +40,7 @@ def start_stream():
 streamer = start_stream()
 
 # for testing stream only
-time.sleep(5)
+time.sleep(3)
 
 # TODO: how to verify if gstreamer udp is successfully connected
 # a.k.a streaming has started?
@@ -61,27 +64,40 @@ tilt_url = top_url + "tilt"
 
 # FIXME: ResetControl in server.py works incorrectly
 # requests.put(reset_url, None)
-reset_val = { 'value': 0 }
+zf_val = { 'value': 0 }
+pt_val = { 'value': 90 }
 cur_stat = requests.get(info_url).json()
 
 if cur_stat['zoom'] != 0:
-	requests.put(zoom_url, data=reset_val)
+	requests.put(zoom_url, data=zf_val)
 if cur_stat['focus'] != 0:
-	requests.put(focus_url, data=reset_val)
-if cur_stat['pan'] != 0:
-	requests.put(pan_url, data=reset_val)
-if cur_stat['tilt'] != 0:
-	requests.put(tilt_url, data=reset_val)
+	requests.put(focus_url, data=zf_val)
+if cur_stat['pan'] != 90:
+	requests.put(pan_url, data=pt_val)
+if cur_stat['tilt'] != 90:
+	requests.put(tilt_url, data=pt_val)
 
-time.sleep(5)
+time.sleep(2)
+
+def fire_request(url, val):
+	requests.put(url, data=val)
+#	time.sleep(1)
+	time.sleep(0.025)
 
 measure_start = time.perf_counter()
 
 # workload 
-control_loop(pan_url, 0, 180, 1)
-control_loop(tilt_url, 0, 180, 1)
-control_loop(zoom_url, 0, 15000, 100)
-control_loop(focus_url, 0, 15000, 100)
+#control_loop(pan_url, 0, 180, 1)
+#control_loop(tilt_url, 0, 180, 1)
+#control_loop(zoom_url, 0, 15000, 100)
+#control_loop(focus_url, 0, 15000, 100)
+
+#for i in range(75): # 1s interval
+for i in range(600): # 25ms interval
+	fire_request(zoom_url, zf_val)
+	fire_request(focus_url, zf_val)
+	fire_request(pan_url, pt_val)
+	fire_request(tilt_url, pt_val)
 
 measure_end = time.perf_counter()
 
@@ -91,10 +107,5 @@ with open(filename, 'w') as output_file:
 		f"Elapsed time: {measure_end - measure_start} sec" ]
 	output_file.write('\n'.join(output))
 
-requests.put(zoom_url, data=reset_val)
-requests.put(focus_url, data=reset_val)
-requests.put(pan_url, data=reset_val)
-requests.put(tilt_url, data=reset_val)
-
 streamer.terminate()
-streamer.wait()
+streamer.wait(60)
