@@ -109,3 +109,12 @@ taskset -c 1 libcamera-vid --framerate=60 --inline -n -t 0 -o - | taskset -c 2 g
 taskset -c 3 ./server.py &> /dev/null
 
 On the client side, just run python script: client.py
+
+
+
+---------------------------------------------------------------------------
+JSON-C LIBRARY
+---------------------------------------------------------------------------
+
+Tutorial (a bit outdated): https://linuxprograms.wordpress.com/2010/05/20/json-c-libjson-tutorial/
+Rubular: https://rubular.com/r/ImZaRigMv5

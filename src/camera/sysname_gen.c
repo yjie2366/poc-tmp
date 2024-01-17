@@ -12,7 +12,7 @@ int main()
 		if (sysname[i] != 0) entmax = i;
 	}
 	printf("#ifndef _SYSNAME_H_\n#define _SYSNAME_H_\n");
-	printf("#include \"test.h\"\n\n");
+//	printf("#include \"test.h\"\n\n");
 	printf("static char *sysname[%d] = {\n", entmax + 1);
 	for (i = 0; i <= entmax; i++) {
 		if (sysname[i]) {
@@ -24,7 +24,7 @@ int main()
 
 	printf("};\n");
 	printf("#define SYSCALL_MAX\t%d\n\n", i);
-
+/*
 	for (i = 0; i <= entmax; i++) {
 		if (sysname[i]) {
 			printf("long __attribute__((weak)) measure_%s(struct audit_syscall *sysc, int iter) { return 0; }\n", sysname[i]);
@@ -47,6 +47,6 @@ int main()
 	printf("\t}\n");
 	printf("\treturn rc;\n");
 	printf("}\n");
-
+*/
 	printf("#endif");
 }
