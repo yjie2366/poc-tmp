@@ -20,6 +20,7 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 
+#include "test.h"
 #include "sysname.h"
 #include "mqtt_testlib.h"
 
@@ -318,6 +319,8 @@ loop:
 
 		*subdelim = '\0';
 		
+		// parse audit plugin args in config file
+		// /usr/local/etc/audit/plugins.d/<PLUGIN-NAME>.conf
 		if (!strcmp(key, "syscall")) {
 			num_sysc = parse_syscall_list(value, ':');
 			if (num_sysc < 0) {

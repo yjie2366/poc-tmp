@@ -190,25 +190,10 @@ int main(int argc, char **argv)
 	int rc = 0;
 	ssize_t msg_len = 0;
 	char message[MAX_AUDIT_MESSAGE_LENGTH] = { 0 };
-/*
-	char *modules[3] = {
-		"/usr/bin/libcamera-vid",
-		"/home/jie/Documents/audit/poc-tmp/src/camera/gst_camera",
-		"/home/jie/Documents/audit/poc-tmp/src/camera/python/server.py"
-	};
-*/	
-//	int exclude_cpus[] = { 0 };
-//	int exclude_cpus[] = { 0, 1 };
 
 	mypid = getpid();
-//	set_pid_priority(mypid, 0);
-//	set_pid_schedpolicy(mypid, SCHED_OTHER);
 	get_pid_schepolicy(mypid);
 
-//	rc = core_bind(0, mypid);
-//	rc = core_bind(-1, mypid);
-//	rc = core_exclude(exclude_cpus, 1, mypid);
-//	rc = core_exclude(exclude_cpus, 2, mypid);
 	unsigned int cpu = 0; getcpu(&cpu, NULL);
 	fprintf(stderr, "plugin@CPU %d PID: %d\n", cpu, mypid); // debug
 
@@ -220,48 +205,22 @@ int main(int argc, char **argv)
 
 	register_handlers();
 	
-	/* 
-		script:
-			libcamera-vid --framerate=60 --inline -n -t 0 -o - |\
-			gst-launch-1.0 fdsrc fd=0 ! h264parse ! rtph264pay ! udpsink host=192.168.151.36 port=5000 sync=false
-	*/
-//	pid_t script_pid = -1;
-//	char *script_path = "/home/jie/Documents/audit/poc-tmp/src/camera/spawn_workload.sh";
-	
-//	script_pid = fork();
-//	if (!script_pid) {
+	/* start auparsing */
+	do {
+		if (auparse_feed_has_data(au)) {
+			// check events for complete based on time 
+			// if there's data
+			auparse_feed_age_events(au);
+		}
 
-		/* execute script */
-//		execl("/bin/bash", "bash", "-c", script_path, (char *) NULL);
-//		perror("Failed to execute script");
-//	}
-//	else if (script_pid > 0) {
-		/* plugin handle signal */
-		/* start auparsing */
-		do {
-			if (auparse_feed_has_data(au)) {
-				// check events for complete based on time 
-				// if there's data
-				auparse_feed_age_events(au);
+		while ((msg_len = read(0, message, MAX_AUDIT_MESSAGE_LENGTH)) > 0) {
+			//fprintf(stderr, "msg_len = %zd\n", msg_len);
+			message[msg_len] = '\0';
+			if (auparse_feed(au, message, msg_len) < 0) {
+				perror("auparse_feed failed: ");
 			}
-	
-			while ((msg_len = read(0, message, MAX_AUDIT_MESSAGE_LENGTH)) > 0) {
-				//fprintf(stderr, "msg_len = %zd\n", msg_len);
-				message[msg_len] = '\0';
-				if (auparse_feed(au, message, msg_len) < 0) {
-					perror("auparse_feed failed: ");
-				}
-			}
-		} while (!hup && !stop);
-//		} while (!hup && !stop && !finish);
-//	}
-//	else {
-//		fprintf(stderr, "Failed to execute %s\n", script_path);
-//		goto out;
-//	}
-
-	// output event number
-//	fprintf(stderr, "#event Libcamera: %ld Gstreamer: %ld Flask: %ld\n", num_event_libcam, num_event_gst, num_event_flask);
+		}
+	} while (!hup && !stop);
 
 out:
 //	if (script_pid > 0) poke_child(script_pid, SIGTERM);

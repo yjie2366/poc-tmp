@@ -8,7 +8,6 @@
 #include <string.h>
 #include <json-c/json.h>
 #include <regex.h>
-#include <openssl/md5.h>
 
 #include "filter.h"
 
@@ -16,6 +15,9 @@
 
 int stop_reading = 0;
 int num_exp = 0;
+
+syscall_set file_syscall_set;
+syscall_set fd_syscall_set;
 
 static void sigalarm_handler(int sig)
 {
@@ -86,7 +88,7 @@ int get_strace_log(int argc, char **argv, char **buffer)
 {
 	int ret = 0, i = 0, num_arg;
 	pid_t pid = 0;
-	int stderr_pipe[2];
+	int stderr_pipe[2] = { 0 };
 	struct sigaction sa;
 
 	if (argc < 2) {
@@ -98,7 +100,7 @@ int get_strace_log(int argc, char **argv, char **buffer)
 	char *strace_bin = "strace";
 	char **strace_cmd = { 0 }; // { strace_bin, "-f", "-v", argv[1], NULL };
 
-#define STRACE_NUM_ARGS 3
+#define STRACE_NUM_ARGS 4
 	num_arg = argc + STRACE_NUM_ARGS; 
 	strace_cmd = malloc(sizeof(char *) * (num_arg + 1));
 	if (!strace_cmd) {
@@ -111,6 +113,7 @@ int get_strace_log(int argc, char **argv, char **buffer)
 	strace_cmd[i++] = "-f";
 	strace_cmd[i++] = "-v";
 	strace_cmd[i++] = "-n";
+	strace_cmd[i++] = "--decode-fds";
 
 	// add application and its arguments
 	for (; i < num_arg; i++) {
@@ -176,7 +179,7 @@ int get_strace_log(int argc, char **argv, char **buffer)
 		}
 		memset(log_buf, 0, buf_size);
 		// record for 5 seconds
-		alarm(5);
+		alarm(10);
 
 		while (!stop_reading) {
 			ret = poll(&pipe, 1, 5000);
@@ -224,7 +227,7 @@ int get_strace_log(int argc, char **argv, char **buffer)
 
 				break;
 			}
-			else if (ret < 0) {
+			else if (ret < 0 && errno != EINTR) {
 				kill(pid, SIGKILL);
 				perror("Poll failed:");
 				return -1;
@@ -262,61 +265,243 @@ int create_json(char *filename, int syscalls[])
 }
 */
 
+#define NUM_ARGS 7
+static int extract_arguments(char *str, struct strace_line *trace)
+{
+	int i, num_args = 0; 
+	char *args_tmp[NUM_ARGS] = { 0 };
+	char *tmp_str = strdup(str);
+	int offset = 0, ret = 0;
+
+	char *end_args = NULL, *cur_arg = NULL;
+	char *start_args = strchr(tmp_str, '(');
+	if (start_args) {
+		offset = find_last_char(start_args, ')');
+		if (offset < 0) {
+			// unfinished
+			if (strstr(start_args, "unfinished")) {
+				struct strace_unfinished *node = create_unfinished_node(trace);
+				if (!node) {
+					perror("Failed to create node: ");
+					return -1;
+				}
+
+				enqueue_unfinished(node);
+				trace->unfinished = 1;
+
+				/*TODO: process unfinished arguments */
+			}
+			else {
+				fprintf(stderr, "Error parsing line: %s\n", tmp_str);
+				return -1;
+			}
+		}
+		else {
+			end_args = start_args + offset;
+		}
+		cur_arg = start_args;
+	}
+	else {
+		// a line with no argument; two possibilities:
+		// 1. +++ exited with 0 +++, +++ killed by <signal> +++
+		// 2. <... <syscall> resume > = retval
+		//  2.1 first half is before "<unfinished ...>"
+		if (strstr(tmp_str, "resumed")) {
+			/*TODO: record the rest of part */
+		}
+		else if (strstr(tmp_str, "+++")) { 
+			// skip for now
+			return 0; 
+		}
+		else {
+			fprintf(stderr, "Error parsing line: %s\n", tmp_str);
+			return -1;
+		}
+	}
+
+	for (i = 0; i < NUM_ARGS; i++) {
+		unsigned int tmp_len = 0;
+
+		while (cur_arg != end_args) {
+			if (*cur_arg == '[') {
+				/* find its matching bracket */
+				char *end_bracket = strchr(cur_arg, ']');
+				tmp_len = end_bracket - cur_arg + 1; 
+
+				args_tmp[i] = malloc(tmp_len + 1);
+				if (!args_tmp[i]) {
+					perror("Unable to extract path: malloc():");
+					return -1;
+				}
+	
+				memcpy(args_tmp[i], cur_arg, tmp_len);
+				args_tmp[i][tmp_len] = '\0'; // replace the ',' with '\0'
+				break;
+			}
+			else if (*cur_arg == '{') {
+				/* find its matching brace */
+				char *end_brace = strchr(cur_arg, '}');
+				tmp_len = end_brace - cur_arg + 1; 
+
+				args_tmp[i] = malloc(tmp_len + 1);
+				if (!args_tmp[i]) {
+					perror("Unable to extract path: malloc():");
+					return -1;
+				}
+	
+				memcpy(args_tmp[i], cur_arg, tmp_len);
+				args_tmp[i][tmp_len] = '\0'; // replace the ',' with '\0'
+
+				break;
+			}
+			else if (*cur_arg == ' ' || *cur_arg == ',') { 
+				offset++;
+				cur_arg = start_args + offset;
+//				printf("cur_arg: %c\n", *cur_arg); 
+			}
+			else {
+				char *end_arg = strchr(cur_arg, ',');
+				if (!end_arg) {
+					// last argument
+					end_arg =  end_args;
+				}
+				tmp_len = end_arg - cur_arg; 
+
+				args_tmp[i] = malloc(tmp_len + 1);
+				if (!args_tmp[i]) {
+					perror("Unable to extract path: malloc():");
+					return -1;
+				}
+				memcpy(args_tmp[i], cur_arg, tmp_len); // ignore the trailing ',' or ')'
+				args_tmp[i][tmp_len] = '\0'; 
+				break;
+			}
+		} 
+		offset += tmp_len;
+		cur_arg = start_args + offset;
+	}
+
+
+	for (i = 0; i < NUM_ARGS; i++) {
+		if (args_tmp[i]) { 
+			free(args_tmp[i]);
+		}
+	}
+	
+	free(tmp_str);
+
+	return 0;
+}
+
+static int extract_syscall_number(char *str, unsigned int *sysno)
+{
+	int ret = 0, _sysno = -1;
+	char sysno_str[8] = { 0 };
+	int offset_sysno_st, len_sysno;
+	char *pattern_sysno =
+//		"^\\[\\s*([0-9]+)\\]\\s(\\w+)\\(", // extract syscall no. & name
+		"\\[\\s*([0-9]+)\\]" // extract syscall number only 
+	;
+	regex_t regex_sysno;
+	regmatch_t matches[2] = { 0 }; // idx 0 is for matching the whole regex
+	
+	// extract sysno and syscall name from log
+	ret = regcomp(&regex_sysno, pattern_sysno, REG_EXTENDED);
+	if (ret) {
+		regex_printerr(&regex_sysno, ret);
+		goto out;
+	}
+
+	ret = regexec(&regex_sysno, str, 2, matches, 0);
+	if (ret) {
+//		if (ret == REG_NOMATCH) {
+//			line = strtok(NULL, delim);
+//			continue;
+//		}
+		regex_printerr(&regex_sysno, ret);
+		goto out;
+	}
+
+	// matches[0] is for the overall regex match
+	offset_sysno_st = matches[1].rm_so;
+	len_sysno = matches[1].rm_eo - matches[1].rm_so; 
+	memcpy(sysno_str, str+offset_sysno_st, len_sysno);
+	sysno_str[len_sysno] = '\0';
+	_sysno = atoi(sysno_str);
+
+out:
+	regfree(&regex_sysno);
+	*sysno = _sysno;
+//	printf("line: %s Sysno: %.*s\n", line, len_sysno, line+offset_sysno_st); //printf specifiers
+//	printf("Sysno: %d sysname: %s\n", sysno, systable[sysno].name);
+
+	return ret;
+}
+
 /* use inode to identify file */
 int log_process(char *log)
 {
-	int ret, i;
+	int ret = 0;
 	char *delim = "\n";
-	regex_t regex[2] = { 0 };
-	char *patterns[] = {
-//		"^\\[\\s*([0-9]+)\\]\\s(\\w+)\\(", // extract syscall no. & name
-		"\\[\\s*([0-9]+)\\]", // extract syscall number only 
-		"\"([\\w|\\/]*)\"",
-		NULL
-	};
 
-	// extract sysno and syscall name from log
-	ret = regcomp(&regex[0], patterns[0], REG_EXTENDED);
-	if (ret) {
-		char msg[256] = { 0 };
-		regerror(ret, &regex[0], msg, 256);
-		fprintf(stderr, "regcomp failed: %s\n", msg);
+	// preallocate 8192 lines
+	int num_line = 0;
+	struct strace_line *traces = calloc(8192, sizeof(struct strace_line));
+	if (!traces) {
+		perror("calloc failed: ");
 		return -1;
 	}
 
 	char *line = strtok(log, delim);
+
 	while (line) {
-		int sysno = 0; char sysno_c[4] = { 0 };
-		int offset_sysno_st, len_sysno;
-		regmatch_t matches[2] = { 0 }; // idx 0 is for matching the whole regex
+		unsigned int type = 0, sysno = -1;
 
-		ret = regexec(&regex[0], line, 2, matches, 0);
-		if (ret) {
-			if (ret == REG_NOMATCH) {
-				line = strtok(NULL, delim);
-				continue;
-			}
-
-			char msg[256] = { 0 };
-			regerror(ret, &regex[0], msg, 256);
-			fprintf(stderr, "regexec failed: %s\n", msg);
-			return -1;
+		ret = extract_syscall_number(line, &sysno);
+		if (ret == REG_NOMATCH) {
+			line = strtok(NULL, delim);
+			continue;
+		}
+		else if (ret) {
+			fprintf(stderr, "Unable to extract syscall number!\n");
+			return ret;
 		}
 
-		offset_sysno_st = matches[1].rm_so;
-		len_sysno = matches[1].rm_eo - matches[1].rm_so; 
-		//printf("Sysno: %.*s\n", len_sysno, line+offset_sysno_st); //printf specifiers
+		traces[num_line].sysno = sysno;
 
-		memcpy(sysno_c, line+offset_sysno_st, len_sysno);
-		sysno_c[len_sysno] = '\0';
+		ret = extract_arguments(line, traces + num_line);
 
-		sysno = atoi(sysno_c);
-		printf("Sysno: %d sysname: %s\n", sysno, sysname[sysno].name);
-
+//		type = systable[sysno].type;
+//		if (type & SYSCALL_PATH) {
+//		}
+//		if (type & SYSCALL_FD) {
+//
+//		}
+//		if (type & SYSCALL_ADDR) {
+//
+//		}
+		
 		line = strtok(NULL, delim);
 	}
 
-	regfree(&regex[0]);
+	free(traces);
+
+	return 0;
+}
+
+int initialize_syscall_set()
+{
+	int i;
+
+	SYSCALL_SET_ZERO(&file_syscall_set);
+	SYSCALL_SET_ZERO(&fd_syscall_set);
+	
+	for (i = 0; i < SYSCALL_MAX; i++) {
+		if (systable[i].type & SYSCALL_PATH) {
+			SYSCALL_SET(i, &file_syscall_set);
+		}
+	}
+//	printf("%lx\n", file_syscall_set.__fds_bits[0]);
 
 	return 0;
 }
@@ -326,13 +511,14 @@ int main(int argc, char **argv)
 	int ret = 0;
 	char *log = NULL;
 
-	// Free log memory before ends
+	// 60s profiling
 	ret = get_strace_log(argc, argv, &log);
 	if (ret == -1) {
 		fprintf(stderr, "get_strace_log error\n");
 		return -1;
 	}
-
+	
+	initialize_syscall_set();
 //	fprintf(stderr, "%s", log);
 	log_process(log);
 //	create_json();
